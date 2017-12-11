@@ -1,0 +1,28 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net462</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Actor.fs" />
+    <Compile Include="Process.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <PropertyGroup>
+    <Authors>Milosz Krajewski</Authors>
+    <PackageId>many</PackageId>
+    <Product>many</Product>
+    <Description>Launch many processes in one terminal window</Description>
+    <PackageTags>process service</PackageTags>
+    <PackageLicenseUrl>https://raw.githubusercontent.com/MiloszKrajewski/many/master/LICENSE</PackageLicenseUrl>
+    <PackageProjectUrl>https://github.com/MiloszKrajewski/many</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MiloszKrajewski/many</RepositoryUrl>
+    <!--<PackageIconUrl>...</PackageIconUrl>-->
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System.Management, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" />
+  </ItemGroup>
+  <Import Project="..\..\Common.targets" />
+  <Import Project="..\..\.paket\Paket.Restore.targets" />
+</Project>

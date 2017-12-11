@@ -1,0 +1,10 @@
+.vs/
+.fake/
+.paket/
+.output/
+.idea/
+packages/
+paket-files/
+
+**/bin/
+**/obj/

@@ -1,0 +1,12 @@
+storage: none
+framework: auto-detect
+
+source https://www.nuget.org/api/v2
+
+nuget Newtonsoft.Json
+nuget Argu
+
+group Tools
+    source https://www.nuget.org/api/v2
+    nuget LibZ.Tool
+
