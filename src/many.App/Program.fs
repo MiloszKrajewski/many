@@ -41,6 +41,8 @@ type Command =
     | Sync of Response<unit>
     | Query of Response<(string * ActualState)>
 
+let locked action = lock typeof<obj> action
+
 let supervisor name command =
     let wait proc feed =
         async {
@@ -51,10 +53,12 @@ let supervisor name command =
             feed Pulse
         } |> Async.Start
     let exec feed =
-        printfn ">>> %s: Starting" name
-        let proc = Process.exec command
-        wait proc feed
-        ActualState.Running proc
+        locked (fun () -> 
+            printfn ">>> %s: Starting" name
+            let proc = Process.exec command
+            wait proc feed
+            ActualState.Running proc
+        )
     let kill proc =
         printfn ">>> %s: Stopping" name
         Process.kill proc
@@ -159,13 +163,19 @@ let main argv =
 
         initializeAll ()
 
+        let readline () = 
+            let result = Console.ReadLine().Trim()
+            if not (String.IsNullOrWhiteSpace(result)) then
+                printfn "\n>>> %s" result
+            result
+
         let rec loop () =
-            match Console.ReadLine() with
+            match readline () with
             | "" | "h" -> menu (); true
             | "q" -> kill "*"; false
             | "l" -> list (); true
-            | Regex "k(?<name>.*)" group -> kill (group "name"); true
-            | Regex "r(?<name>.*)" group -> run (group "name"); true
+            | Regex "^k\s*(?<name>.*)$" group -> kill (group "name"); true
+            | Regex "^r\s*(?<name>.*)$" group -> run (group "name"); true
             | _ -> (); true
 
         while loop () do ()

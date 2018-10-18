@@ -5,6 +5,7 @@
     <TargetFramework>net462</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="paket.references" />
     <Compile Include="Actor.fs" />
     <Compile Include="Process.fs" />
     <Compile Include="Program.fs" />
@@ -20,6 +21,9 @@
     <RepositoryUrl>https://github.com/MiloszKrajewski/many</RepositoryUrl>
     <!--<PackageIconUrl>...</PackageIconUrl>-->
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" Version="4.5.2" />
+  </ItemGroup>
   <ItemGroup>
     <Reference Include="System.Management, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" />
   </ItemGroup>
