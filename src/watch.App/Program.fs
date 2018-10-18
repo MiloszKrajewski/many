@@ -3,45 +3,93 @@
 open System
 open System.IO
 open System.Threading.Tasks
+open System.Text.RegularExpressions
 
-let watchFolder folder handler = 
-    let watcher = new FileSystemWatcher(folder)
-    let handler (e: FileSystemEventArgs) = handler e
-    let disposables = [
-        watcher :> IDisposable
-        watcher.Changed.Subscribe handler
-        watcher.Created.Subscribe handler
-        watcher.Deleted.Subscribe handler
-        watcher.Renamed.Subscribe handler
-    ]
-    watcher.EnableRaisingEvents <- true
-    fun () -> disposables |> Seq.iter (fun d -> d.Dispose ())
-
-let delay secs action arg = Task.Delay(secs*1000.0 |> int).ContinueWith(fun _ -> action arg) |> ignore
-
+let delay secs action arg = 
+    Task.Delay(secs*1000.0 |> int).ContinueWith(fun _ -> action arg) |> ignore
+    
 type Message = 
     | Change
-    | Trigger of int64
-    | Started
+    | Trigger of DateTime
+    | Failed
     | Stopped
 
-[<EntryPoint>]
-let main argv =
-    let mutable lastTrigger = DateTime.MinValue
-    let mutable lastChange = DateTime.MinValue
+let createWatcher folder handler = 
+    let watcher = new FileSystemWatcher(folder)
+    let disposables = [
+        watcher :> IDisposable
+        watcher.Changed.Subscribe (fun e -> handler (e.ChangeType, None, e.FullPath))
+        watcher.Created.Subscribe (fun e -> handler (e.ChangeType, None, e.FullPath))
+        watcher.Deleted.Subscribe (fun e -> handler (e.ChangeType, None, e.FullPath))
+        watcher.Renamed.Subscribe (fun e -> handler (e.ChangeType, Some e.OldFullPath, e.FullPath))
+    ]
+    watcher.EnableRaisingEvents <- true
+    watcher.NotifyFilter <- 
+        NotifyFilters.FileName ||| NotifyFilters.DirectoryName ||| NotifyFilters.Size ||| NotifyFilters.LastWrite ||| NotifyFilters.LastAccess ||| CreationTime ||| Security
+    fun () -> disposables |> Seq.iter (fun d -> d.Dispose ())
 
+let createTrigger execute =
+    let longPause = 3.0
+    let mutable changed = DateTime.MinValue
+    let mutable started = None
+    
+    let execute post = 
+        async { 
+            try 
+                do! execute ()
+                post Stopped 
+            with _ -> 
+                post Failed 
+        } |> Async.StartAsTask |> ignore   
+    
     let post = Actor.create (fun message post -> async {
         let now = DateTime.Now
-        match message with
-        | Change when now.Subtract(lastChange).TotalSeconds > 0.1 -> 
-            lastChange <- now
-            delay 3.0 post (Trigger now.Ticks)
-        | Trigger timestamp when timestamp = lastChange.Ticks ->
-            ()
+        match message, started with
+        | Change, _ ->
+            changed <- now
+            delay longPause post (Trigger now)
+        | Trigger timestamp, None when timestamp = changed ->
+            started <- Some now
+            execute post
+        | Failed, None ->
+            started <- None
+            post Change
+        | Stopped, Some timestamp when timestamp < changed ->
+            started <- None
+            post Change
+        | Stopped, _ ->
+            started <- None
+        | _ -> ()
     })
+    
+    fun () -> post Change
+    
+let wildcardToRegex pattern = Regex("^" + Regex.Escape(pattern).Replace("\\*", ".*").Replace("\\?", ".") + "$")
+let isMatch (regex: Regex) text = regex.IsMatch(text)    
 
-    let handler (e: FileSystemEventArgs) = printfn "%A %s" e.ChangeType e.FullPath
-    let watcher = watchFolder "C:\\Temp" handler
+let isIncluded includes excludes =
+    let includes = includes |> Seq.map (wildcardToRegex >> isMatch) |> Seq.toArray 
+    let excludes = excludes |> Seq.map (wildcardToRegex >> isMatch) |> Seq.toArray
+    fun filename -> 
+        (includes |> Array.isEmpty || includes |> Seq.exists (fun m -> m filename))
+        && (excludes |> Seq.exists (fun m -> m filename) |> not)
+ 
+[<EntryPoint>]
+let main argv =
+    let matcher = isIncluded ["*.cs"] []
+    let trigger = createTrigger (fun () -> async { printfn "Triggered..." }) 
+    let watcher = createWatcher "C:\\Temp" (fun (e, oldPath, newPath) -> 
+        let newName = newPath |> Path.GetFileName
+        let oldName = oldPath |> Option.map Path.GetFileName
+        let applies = 
+            match e with
+            | WatcherChangeTypes.Changed | WatcherChangeTypes.Created -> matcher newName
+            | WatcherChangeTypes.Renamed when oldName.IsSome -> matcher newName || matcher oldName.Value
+            | WatcherChangeTypes.Renamed -> matcher newName
+            | WatcherChangeTypes.Deleted -> true
+            | _ -> false
+        if applies then trigger () 
+    )
     Console.ReadLine () |> ignore
     watcher ()
     0

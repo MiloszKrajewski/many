@@ -6,8 +6,6 @@
   </PropertyGroup>
   <ItemGroup>
     <None Include="paket.references" />
-    <Compile Include="Actor.fs" />
-    <Compile Include="Process.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <PropertyGroup>
@@ -25,7 +23,7 @@
     <PackageReference Include="FSharp.Core" Version="4.5.2" />
   </ItemGroup>
   <ItemGroup>
-    <Reference Include="System.Management, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" />
+    <ProjectReference Include="..\shared.Lib\shared.Lib.fsproj" />
   </ItemGroup>
   <Import Project="..\..\Common.targets" />
   <Import Project="..\..\.paket\Paket.Restore.targets" />

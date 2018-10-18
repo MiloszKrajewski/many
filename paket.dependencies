@@ -6,7 +6,6 @@ source https://www.nuget.org/api/v2
 
 nuget Newtonsoft.Json
 nuget Argu
-nuget FSharp.Control.Reactive
 
 group Tools
     source https://www.nuget.org/api/v2
