@@ -14,6 +14,24 @@ type Message =
     | Failed
     | Stopped
 
+type ObjectType =
+    | File
+    | Directory
+
+type DirectoryInfo with member i.AsTuple () = (Directory, i.FullName, i.LastWriteTime)
+type FileInfo with member i.AsTuple () = (File, i.FullName, i.LastWriteTime)
+
+let rec scan (root: DirectoryInfo) = 
+    seq {
+        let root = if root.Exists then [root] else []
+        let directories = root |> Seq.collect (fun r -> r.GetDirectories()) 
+        let files = root |> Seq.collect (fun r -> r.GetFiles())
+        yield! root |> Seq.map (fun i -> i.AsTuple())
+        yield! files |> Seq.map (fun i -> i.AsTuple())
+        yield! directories |> Seq.collect (fun d -> scan d)
+    }
+        
+
 let createWatcher folder handler = 
     let watcher = new FileSystemWatcher(folder)
     let disposables = [
@@ -24,8 +42,6 @@ let createWatcher folder handler =
         watcher.Renamed.Subscribe (fun e -> handler (e.ChangeType, Some e.OldFullPath, e.FullPath))
     ]
     watcher.EnableRaisingEvents <- true
-    watcher.NotifyFilter <- 
-        NotifyFilters.FileName ||| NotifyFilters.DirectoryName ||| NotifyFilters.Size ||| NotifyFilters.LastWrite ||| NotifyFilters.LastAccess ||| CreationTime ||| Security
     fun () -> disposables |> Seq.iter (fun d -> d.Dispose ())
 
 let createTrigger execute =
@@ -76,7 +92,7 @@ let isIncluded includes excludes =
  
 [<EntryPoint>]
 let main argv =
-    let matcher = isIncluded ["*.cs"] []
+    let matcher = isIncluded [] []
     let trigger = createTrigger (fun () -> async { printfn "Triggered..." }) 
     let watcher = createWatcher "C:\\Temp" (fun (e, oldPath, newPath) -> 
         let newName = newPath |> Path.GetFileName
@@ -88,7 +104,7 @@ let main argv =
             | WatcherChangeTypes.Renamed -> matcher newName
             | WatcherChangeTypes.Deleted -> true
             | _ -> false
-        if applies then trigger () 
+        if applies then trigger ()
     )
     Console.ReadLine () |> ignore
     watcher ()
