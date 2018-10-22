@@ -20,9 +20,6 @@
     <!--<PackageIconUrl>...</PackageIconUrl>-->
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="FSharp.Core" Version="4.5.2" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\shared.Lib\shared.Lib.fsproj" />
   </ItemGroup>
   <Import Project="..\..\Common.targets" />

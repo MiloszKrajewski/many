@@ -1,11 +1,12 @@
-# version 5.155.0
 storage none
 framework auto-detect
 
 source https://www.nuget.org/api/v2
 
+nuget FSharp.Core
 nuget Newtonsoft.Json
 nuget Argu
+nuget System.Management
 
 group Tools
     source https://www.nuget.org/api/v2

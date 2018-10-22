@@ -21,17 +21,17 @@ Target "Rebuild" ignore
 Target "Release" (fun _ ->
     let libz = "packages/tools/LibZ.Tool/tools/libz.exe" |> FullName
     let out = "./.output"
-    
+
     Proj.releaseNupkg ()
-    
-    let publish appname = 
+
+    let publish appname =
         let out = out @@ appname
         out |> CleanDir
-        Proj.publish out "src/many.App"
+        Proj.publish out (sprintf "src/%s.App" appname)
         Shell.runAt out libz (sprintf "inject-dll -a %s.App.exe -i *.dll --move" appname)
-        !! (out @@ (sprintf "%s.App.exe*" appname)) 
+        !! (out @@ (sprintf "%s.App.exe*" appname))
         |> Seq.iter (fun fn -> fn |> Rename (fn.Replace(sprintf "%s.App" appname, appname)))
-        
+
     publish "many"
     publish "watch"
 )
