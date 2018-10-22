@@ -9,7 +9,8 @@ open System.Threading.Tasks
 open Argu
 
 type Arguments =
-    | [<MainCommand>] Config of string
+    | [<AltCommandLine("-c")>] Config of string
+    | [<AltCommandLine("-s")>] Section of string
     | [<AltCommandLine("-i")>] Include of string list
     | [<AltCommandLine("-e")>] Exclude of string list
     with
@@ -17,6 +18,7 @@ type Arguments =
         member s.Usage =
             match s with
             | Config _ -> "config filename (default: many.config.json)"
+            | Section _ -> "section name inside config (no section, if not provided)"
             | Include _ -> "include tasks on startup (default: *)"
             | Exclude _ -> "exclude tasks on startup (default: none)"
 
@@ -89,16 +91,26 @@ let (|Regex|_|) p s =
 let wildcard w =
     Regex(Regex.Escape(w).Replace(@"\*", ".*").Replace(@"\?", ".") |> sprintf "^%s$").IsMatch
 
-let loadTasks filename =
-    JObject.Parse(File.ReadAllText(filename)).Properties()
+let loadTasks section filename =
+    JObject.Load filename section
+    |> (fun o -> o.Properties())
     |> Seq.map (fun p -> (p.Name, p.Value.ToString()))
     |> Seq.toList
 
 let parseTasks filename arguments =
-    arguments
-    |> Seq.choose (fun arg -> match arg with | Config c -> Some c | _ -> None)
-    |> List.ofSeq |> function | [] when File.Exists(filename) -> [filename] | l -> l
-    |> Seq.collect loadTasks
+    let section = 
+        arguments 
+        |> Seq.choose (function | Section s -> Some s | _ -> None) 
+        |> Seq.tryHead
+
+    let configs = 
+        arguments 
+        |> Seq.choose (function | Config c -> Some c | _ -> None) 
+        |> List.ofSeq 
+        |> function | [] when File.Exists(filename) -> [filename] | l -> l  
+    
+    configs 
+    |> Seq.collect (loadTasks section)
     |> Seq.rev
     |> Seq.distinctBy fst
 
