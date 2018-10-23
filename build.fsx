@@ -2,10 +2,11 @@
 #load "build.tools.fsx"
 
 open Fake
+open System.Threading
 
 let build () = Proj.build "src"
 let restore () = Proj.restore "src"
-let pack project = Proj.pack
+//let pack project = Proj.pack
 
 Target "Clean" (fun _ -> !! "**/bin/" ++ "**/obj/" |> DeleteDirs)
 
@@ -19,21 +20,26 @@ Target "Build" (fun _ ->
 Target "Rebuild" ignore
 
 Target "Release" (fun _ ->
-    let libz = "packages/tools/LibZ.Tool/tools/libz.exe" |> FullName
+    let libzApp = "packages/tools/LibZ.Tool/tools/libz.exe" |> FullName
     let out = "./.output"
-
-    Proj.releaseNupkg ()
+    let libz = out @@ "libz"
 
     let publish appname =
-        let out = out @@ appname
-        out |> CleanDir
-        Proj.publish out (sprintf "src/%s.App" appname)
-        Shell.runAt out libz (sprintf "inject-dll -a %s.App.exe -i *.dll --move" appname)
-        !! (out @@ (sprintf "%s.App.exe*" appname))
-        |> Seq.iter (fun fn -> fn |> Rename (fn.Replace(sprintf "%s.App" appname, appname)))
+        let out' = out @@ appname
+        out' |> CleanDir
+        Proj.publish out' (sprintf "src/%s.App" appname)
+        !! (out' @@ "*.exe") ++ (out' @@ "*.dll") ++ (out' @@ "*.exe.config") |> CopyFiles libz
+
+    libz |> CleanDir
 
     publish "many"
     publish "watch"
+
+    !! (libz @@ "*.App.exe*") |> Seq.iter (fun fn -> fn |> Rename (fn.Replace(".App.", ".")))
+
+    Shell.runAt libz libzApp "add -l many.libz -i *.dll --move"
+    Shell.runAt libz libzApp "instrument -a many.exe --libz-file many.libz"
+    Shell.runAt libz libzApp "instrument -a watch.exe --libz-file many.libz"
 )
 
 "Restore" ==> "Build"

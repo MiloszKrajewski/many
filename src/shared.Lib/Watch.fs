@@ -3,13 +3,12 @@ module Watch
 open System
 open System.IO
 open System.Threading.Tasks
-open System.Text.RegularExpressions
 open Argu
 open Tools
 
-let delay millis action arg = 
+let delay millis action arg =
     Task.Delay(int millis).ContinueWith(fun _ -> action arg) |> ignore
-    
+
 type Arguments =
     | [<AltCommandLine("-f"); Unique>] Folder of string
     | [<AltCommandLine("-i")>] Include of string
@@ -19,11 +18,11 @@ type Arguments =
     interface IArgParserTemplate with
         member s.Usage =
             match s with
-            | Folder _ -> "root folder (default: .)" 
+            | Folder _ -> "root folder (default: .)"
             | Include _ -> "include tasks on startup (default: *)"
             | Exclude _ -> "exclude tasks on startup (default: none)"
             | Command _ -> "command executed when changes are detected"
-            
+
 type Configuraion = {
     Folder: string
     Includes: string list
@@ -32,20 +31,20 @@ type Configuraion = {
 }
 
 let parseArguments arguments =
-    let fix s = if s |> String.exists (fun c -> c = ' ') then sprintf "\"%s\"" s else s  
+    let fix s = if s |> String.exists (fun c -> c = ' ') then sprintf "\"%s\"" s else s
     {
         Folder = arguments |> Seq.tryPick (function | Folder f -> Some f | _ -> None) |> Option.defaultValue "."
-        Includes = arguments |> Seq.choose (function | Include i -> Some i | _ -> None) |> List.ofSeq 
+        Includes = arguments |> Seq.choose (function | Include i -> Some i | _ -> None) |> List.ofSeq
         Excludes = arguments |> Seq.choose (function | Exclude e -> Some e | _ -> None) |> List.ofSeq
-        Command = 
-            arguments 
-            |> Seq.choose (function | Command c -> Some c | _ -> None) 
-            |> Seq.collect id 
-            |> Seq.map fix 
+        Command =
+            arguments
+            |> Seq.choose (function | Command c -> Some c | _ -> None)
+            |> Seq.collect id
+            |> Seq.map fix
             |> String.join " "
     }
-    
-type Message = 
+
+type Message =
     | Change
     | Trigger of DateTime
     | Failed
@@ -54,7 +53,7 @@ type Message =
 type ObjectType =
     | File
     | Directory
-   
+
 type ObjectInfo = {
     Type: ObjectType
     Name: string
@@ -64,17 +63,17 @@ type ObjectInfo = {
 type DirectoryInfo with member i.AsTuple () = { Type = Directory; Name = i.FullName; Timestamp = i.LastWriteTime }
 type FileInfo with member i.AsTuple () = { Type = File; Name = i.FullName; Timestamp = i.LastWriteTime }
 
-let rec scan (root: DirectoryInfo) = 
+let rec scan (root: DirectoryInfo) =
     seq {
         let root = if root.Exists then [root] else []
-        let directories = root |> Seq.collect (fun r -> r.GetDirectories()) 
+        let directories = root |> Seq.collect (fun r -> r.GetDirectories())
         let files = root |> Seq.collect (fun r -> r.GetFiles())
         yield! root |> Seq.map (fun i -> i.AsTuple())
         yield! files |> Seq.map (fun i -> i.AsTuple())
         yield! directories |> Seq.collect (fun d -> scan d)
     }
 
-let createWatcher folder handler = 
+let createWatcher folder handler =
     let watcher = new FileSystemWatcher(folder)
     let disposables = [
         watcher :> IDisposable
@@ -83,29 +82,30 @@ let createWatcher folder handler =
         watcher.Deleted.Subscribe (fun e -> handler (e.ChangeType, None, e.FullPath))
         watcher.Renamed.Subscribe (fun e -> handler (e.ChangeType, Some e.OldFullPath, e.FullPath))
     ]
+    watcher.IncludeSubdirectories <- true
     watcher.EnableRaisingEvents <- true
     fun () -> disposables |> Seq.iter (fun d -> d.Dispose ())
 
 let createTrigger folder matcher execute =
     let differences setA setB = Set.difference (Set.union setA setB) (Set.intersect setA setB)
     let scan () =
-        printfn "Scanning..." 
+        printfn "Scanning..."
         DirectoryInfo(folder) |> scan |> Seq.filter (fun i -> i.Type = File && matcher i.Name) |> Set.ofSeq
 
     let longPause = 3000
     let mutable changed = DateTime.MinValue
     let mutable started = None
     let mutable scanned = Set.empty
-    
-    let execute post = 
-        async { 
-            try 
+
+    let execute post =
+        async {
+            try
                 do! execute ()
-                post Stopped 
-            with _ -> 
-                post Failed 
-        } |> Async.StartAsTask |> ignore   
-    
+                post Stopped
+            with _ ->
+                post Failed
+        } |> Async.StartAsTask |> ignore
+
     let post = Actor.create (fun message post -> async {
         let now = DateTime.Now
         match message, started with
@@ -133,28 +133,32 @@ let createTrigger folder matcher execute =
             started <- None
         | _ -> ()
     })
-    
+
     fun () -> post Change
-    
+
 let isIncluded includes excludes =
-    let includes = includes |> Seq.map Regex.wildcard |> Seq.toArray 
+    let includes = includes |> Seq.map Regex.wildcard |> Seq.toArray
     let excludes = excludes |> Seq.map Regex.wildcard |> Seq.toArray
-    fun filename -> 
+    fun filename ->
         (includes |> Array.isEmpty || includes |> Seq.exists (fun m -> m filename))
         && (excludes |> Seq.exists (fun m -> m filename) |> not)
-        
+
 let run arguments =
-    let parser = ArgumentParser.Create<Arguments>(programName = "watch.exe")
     let config = arguments |> parseArguments
-    let execute () = async { 
+    let execute () = async {
         let proc = Process.exec config.Command
         do! proc |> Process.wait |> Async.AwaitTask
-        match proc.ExitCode with | 0 -> () | c -> failwithf "Process returned error code %d" c 
+        match proc.ExitCode with | 0 -> () | c -> failwithf "Process returned error code %d" c
     }
-    
+
     let folder = config.Folder
     let matcher = isIncluded config.Includes config.Excludes
-    let trigger = createTrigger folder matcher (fun () -> execute ()) 
-    let watcher = createWatcher folder (fun _ -> trigger ())
-    trigger ()
-    while true do Console.ReadLine () |> ignore
+    let trigger = createTrigger folder matcher (fun () -> execute ())
+    createWatcher folder (fun _ -> trigger ()) |> ignore
+
+    let rec loop () = 
+        trigger()
+        Console.ReadLine() |> ignore
+        loop ()
+
+    loop ()
